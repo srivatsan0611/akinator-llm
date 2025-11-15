@@ -104,11 +104,11 @@ export default function GameWindow() {
 
   const renderAnswerButtons = () => (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mt-6 animate-fade-in">
-      <button onClick={() => handleAnswer('Yes')} className="btn-answer bg-green-500 hover:bg-green-600">Yes</button>
-      <button onClick={() => handleAnswer('No')} className="btn-answer bg-red-500 hover:bg-red-600">No</button>
-      <button onClick={() => handleAnswer("I don't know")} className="btn-answer bg-yellow-500 hover:bg-yellow-600 text-gray-900">I don't know</button>
-      <button onClick={() => handleAnswer('Probably')} className="btn-answer bg-blue-500 hover:bg-blue-600">Probably</button>
-      <button onClick={() => handleAnswer('Probably Not')} className="btn-answer bg-purple-500 hover:bg-purple-600">Probably Not</button>
+      <button onClick={() => handleAnswer('Yes')} className="text-white font-bold py-3 px-4 rounded-lg transition-all transform hover:scale-105 hover:shadow-xl w-full bg-green-500 hover:bg-green-600">Yes</button>
+      <button onClick={() => handleAnswer('No')} className="text-white font-bold py-3 px-4 rounded-lg transition-all transform hover:scale-105 hover:shadow-xl w-full bg-red-500 hover:bg-red-600">No</button>
+      <button onClick={() => handleAnswer("I don't know")} className="text-white font-bold py-3 px-4 rounded-lg transition-all transform hover:scale-105 hover:shadow-xl w-full bg-yellow-500 hover:bg-yellow-600 text-gray-900">I don't know</button>
+      <button onClick={() => handleAnswer('Probably')} className="text-white font-bold py-3 px-4 rounded-lg transition-all transform hover:scale-105 hover:shadow-xl w-full bg-blue-500 hover:bg-blue-600">Probably</button>
+      <button onClick={() => handleAnswer('Probably Not')} className="text-white font-bold py-3 px-4 rounded-lg transition-all transform hover:scale-105 hover:shadow-xl w-full bg-purple-500 hover:bg-purple-600">Probably Not</button>
     </div>
   );
 
@@ -117,7 +117,7 @@ export default function GameWindow() {
       <div className="w-full max-w-2xl mx-auto bg-gray-800/80 backdrop-blur-md shadow-2xl rounded-2xl p-8 text-center">
         <h2 className="text-3xl font-bold mb-4">Welcome to Akinator-LLM</h2>
         <p className="text-gray-300 mb-6">Please sign in to challenge the AI and see if it can guess what you're thinking!</p>
-        <button onClick={() => signIn()} className="btn-primary bg-blue-600 hover:bg-blue-700">
+        <button onClick={() => signIn()} className="text-white font-bold py-3 px-6 rounded-lg transition-transform transform hover:scale-105 shadow-lg bg-blue-600 hover:bg-blue-700">
           Sign In to Play
         </button>
       </div>
@@ -155,7 +155,7 @@ export default function GameWindow() {
           <div className="text-center">
             <h2 className="text-2xl font-bold mb-2">Ready for a challenge?</h2>
             <p className="text-gray-400 mb-6">Think of anything, and I'll try to guess it in 20 questions or less.</p>
-            <button onClick={handleStartGame} className="btn-primary bg-green-600 hover:bg-green-700">
+            <button onClick={handleStartGame} className="text-white font-bold py-3 px-6 rounded-lg transition-transform transform hover:scale-105 shadow-lg bg-green-600 hover:bg-green-700">
               Start New Game
             </button>
           </div>
@@ -167,8 +167,8 @@ export default function GameWindow() {
           <div className="text-center animate-fade-in">
             <p className="text-xl font-semibold mb-4">My guess is... <span className="text-blue-400">{currentGuess}</span>! Am I right?</p>
             <div className="flex justify-center gap-4">
-              <button onClick={() => handleGuessResponse(true)} className="btn-answer bg-green-500 hover:bg-green-600">Yes, you got it!</button>
-              <button onClick={() => handleGuessResponse(false)} className="btn-answer bg-red-500 hover:bg-red-600">No, keep guessing</button>
+              <button onClick={() => handleGuessResponse(true)} className="text-white font-bold py-3 px-4 rounded-lg transition-all transform hover:scale-105 hover:shadow-xl w-full bg-green-500 hover:bg-green-600">Yes, you got it!</button>
+              <button onClick={() => handleGuessResponse(false)} className="text-white font-bold py-3 px-4 rounded-lg transition-all transform hover:scale-105 hover:shadow-xl w-full bg-red-500 hover:bg-red-600">No, keep guessing</button>
             </div>
           </div>
         )}
@@ -176,7 +176,7 @@ export default function GameWindow() {
         {gameState === GameState.Finished && (
           <div className="text-center animate-fade-in">
             <p className="text-2xl font-bold text-green-400 mb-4">🎉 I guessed it! Another round? 🎉</p>
-            <button onClick={handleStartGame} className="btn-primary bg-blue-600 hover:bg-blue-700">
+            <button onClick={handleStartGame} className="text-white font-bold py-3 px-6 rounded-lg transition-transform transform hover:scale-105 shadow-lg bg-blue-600 hover:bg-blue-700">
               Play Again
             </button>
           </div>

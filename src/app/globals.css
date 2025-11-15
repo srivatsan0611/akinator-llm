@@ -2,15 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer components {
-  .btn-primary {
-    @apply text-white font-bold py-3 px-6 rounded-lg transition-transform transform hover:scale-105 shadow-lg;
-  }
-  .btn-answer {
-    @apply text-white font-bold py-3 px-4 rounded-lg transition-all transform hover:scale-105 hover:shadow-xl w-full;
-  }
-}
-
 @layer utilities {
   @keyframes fade-in {
     from { opacity: 0; transform: translateY(10px); }
