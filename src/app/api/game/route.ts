@@ -17,7 +17,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
   }
 
-  const { chatHistory } = await req.json();
+  // Define the type for the incoming chat history
+  type ChatHistoryItem = {
+    role: 'user' | 'assistant';
+    content: string;
+  };
+
+  const { chatHistory }: { chatHistory: ChatHistoryItem[] } = await req.json();
 
   if (!chatHistory) {
     return NextResponse.json({ message: 'chatHistory is required' }, { status: 400 });
@@ -26,81 +32,77 @@ export async function POST(req: NextRequest) {
   const systemPrompt = `You are 'Akinator-LLM', a master guessing game bot. Your only goal is to guess the character, object, or concept the user is thinking of.
 
 **--- YOUR DIRECTIVES ---**
-1.  **One Question Only:** You MUST ask exactly ONE clarifying question per turn.
-2.  **Simple & Direct:** Your questions MUST be a single line and as simple as possible (e.g., "Is it a real person?", "Is it a movie?").
-3.  **No Small Talk:** DO NOT use conversational fillers. No "Okay," "Great," "Let's see," or apologies. Go directly to the next question.
-4.  **Use The History:** Analyze the full chat history to ask logical, deductive questions. Do not repeat questions.
-5.  **The 'GUESS:' Token:** When you are highly confident, you MUST make a guess. Prefix your guess with the special token "GUESS:".
-6.  **20 Questions Max:** You have a hard limit of 20 questions. If you reach this limit, you must make a guess on your next turn.
-7.  **First Question:** If the history is empty, your first question should be broad, like "Is it a real person or a fictional character?".
+1.  **Analyze History:** Carefully analyze the user's answers in the provided history.
+2.  **Think Step-by-Step:** First, think about your strategy. What have you learned? What is the most logical next question to narrow down the possibilities?
+3.  **Formulate Action:** Based on your thought process, formulate your action. This will be either a single, simple, one-line question or a guess prefixed with "GUESS:".
+4.  **Strict JSON Output:** You MUST format your response as a JSON object with two keys: "thought" and "action".
 
-**--- GAMEPLAY EXAMPLES (FEW-SHOT LEARNING) ---**
+**--- JSON OUTPUT FORMAT ---**
+{
+  "thought": "Your detailed reasoning and step-by-step thinking process goes here. Explain why you are asking the next question.",
+  "action": "Your single, one-line question OR your guess prefixed with 'GUESS:' goes here."
+}
 
-**Example 1: Guessing "Darth Vader"**
-
-*   **User History:** []
-*   **Your Action:** Is it a fictional character?
-
-*   **User History:** [{role: "assistant", content: "Is it a fictional character?"}, {role: "user", content: "Yes"}]
-*   **Your Action:** Is this character from a movie?
-
-*   **User History:** [... {role: "user", content: "Yes"}]
-*   **Your Action:** Is this character known for being a villain?
-
-*   **User History:** [... {role: "user", content: "Yes"}]
-*   **Your Action:** Does this character wear a mask?
-
-*   **User History:** [... {role: "user", content: "Yes"}]
-*   **Your Action:** Is this character associated with the color black?
-
-*   **User History:** [... {role: "user", content: "Probably"}]
-*   **Your Action:** GUESS: Is it Darth Vader?
-
-**Example 2: Guessing "A Bicycle"**
-
-*   **User History:** []
-*   **Your Action:** Is it an object?
-
-*   **User History:** [{role: "assistant", content: "Is it an object?"}, {role: "user", content: "Yes"}]
-*   **Your Action:** Is it used for transportation?
-
-*   **User History:** [... {role: "user", content: "Yes"}]
-*   **Your Action:** Does it have wheels?
-
-*   **User History:** [... {role: "user", content: "Yes"}]
-*   **Your Action:** Does it typically have two wheels?
-
-*   **User History:** [... {role: "user", content: "Yes"}]
-*   **Your Action:** Does it require a motor to operate?
-
-*   **User History:** [... {role: "user", content: "No"}]
-*   **Your Action:** GUESS: Is it a bicycle?
+**--- RULES & EXAMPLES ---**
+*   **Action Rules:**
+    *   The "action" string MUST be a single line.
+    *   It must NOT contain any conversational fillers (e.g., "Okay," "Great").
+    *   If the history is empty, your first question should be broad (e.g., "Is it a real person or a fictional character?").
+*   **Example 1:**
+    *   **History:** []
+    *   **Your JSON Response:**
+        {
+          "thought": "The history is empty. I need to start with a broad question to determine the main category. I'll ask if the user is thinking of a real person or a fictional character.",
+          "action": "Is it a real person or a fictional character?"
+        }
+*   **Example 2:**
+    *   **History:** [{ "role": "assistant", "content": "Is it a real person or a fictional character?" }, { "role": "user", "content": "Fictional" }]
+    *   **Your JSON Response:**
+        {
+          "thought": "The user confirmed it's a fictional character. Now I need to know the medium. I'll ask if the character is from a movie.",
+          "action": "Is the character from a movie?"
+        }
+*   **Example 3 (Guessing):**
+    *   **History:** [ ... many questions and answers pointing to a specific character ... ]
+    *   **Your JSON Response:**
+        {
+          "thought": "The user has confirmed the character is a villain from a movie who wears a mask and is associated with the color black. I am highly confident the answer is Darth Vader.",
+          "action": "GUESS: Is it Darth Vader?"
+        }
 `;
 
   try {
-    const messages = [
+    const messages: Groq.Chat.Completions.ChatCompletionMessageParam[] = [
       { role: 'system', content: systemPrompt },
       ...chatHistory,
     ];
 
     const chatCompletion = await groq.chat.completions.create({
-      messages: messages as any, // Type assertion due to Groq SDK's strict typing
+      messages: messages,
       model: 'qwen/qwen3-32b',
       temperature: 0.7,
-      max_tokens: 150,
+      max_tokens: 300, // Increased max_tokens to accommodate JSON structure
+      response_format: { type: 'json_object' }, // Enforce JSON output
     });
 
-    const llmResponse = chatCompletion.choices[0]?.message?.content || '';
-    const cleanResponse = llmResponse.replace(/<think>[\s\S]*?<\/think>/, '').trim();
+    const llmResponse = chatCompletion.choices[0]?.message?.content || '{}';
 
-    if (cleanResponse.startsWith('GUESS:')) {
-      const guessContent = cleanResponse.replace('GUESS:', '').trim();
-      return NextResponse.json({ type: 'guess', content: guessContent });
-    } else {
-      return NextResponse.json({ type: 'question', content: cleanResponse.trim() });
+    try {
+      const parsedResponse = JSON.parse(llmResponse);
+      const action = parsedResponse.action || "I'm having trouble thinking of a question. Let's try again.";
+
+      if (action.startsWith('GUESS:')) {
+        const guessContent = action.replace('GUESS:', '').trim();
+        return NextResponse.json({ type: 'guess', content: guessContent });
+      } else {
+        return NextResponse.json({ type: 'question', content: action.trim() });
+      }
+    } catch (parseError) {
+      console.error('JSON Parsing Error:', parseError, 'Raw Response:', llmResponse);
+      // Fallback for non-JSON response, though less likely with `response_format`
+      return NextResponse.json({ type: 'question', content: "I got a bit confused. Could you repeat your last answer?" });
     }
   } catch (error) {
     console.error('Groq API error:', error);
     return NextResponse.json({ message: 'Error communicating with AI' }, { status: 500 });
   }
-}
