@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
+import { useState, useEffect, useRef } from 'react';
+import { useSession, signIn } from 'next-auth/react';
 
 enum GameState {
   Idle = 'idle',
@@ -22,17 +22,20 @@ export default function GameWindow() {
   const [questionCount, setQuestionCount] = useState<number>(0);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [currentGuess, setCurrentGuess] = useState<string | null>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   const MAX_QUESTIONS = 20;
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatHistory, isLoading]);
 
   const fetchQuestion = async (history: ChatMessage[]) => {
     setIsLoading(true);
     try {
       const response = await fetch('/api/game', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chatHistory: history }),
       });
       const data = await response.json();
@@ -61,48 +64,60 @@ export default function GameWindow() {
   };
 
   const handleStartGame = () => {
+    if (!session) {
+      signIn();
+      return;
+    }
     setGameState(GameState.Playing);
     setChatHistory([]);
     setQuestionCount(0);
     setCurrentGuess(null);
-    fetchQuestion([]); // Get the first question
+    fetchQuestion([]);
   };
 
   const handleAnswer = (answer: string) => {
     if (questionCount >= MAX_QUESTIONS && gameState === GameState.Playing) {
       setChatHistory((prev) => [...prev, { role: 'assistant', content: "I've reached my question limit. I'll make a guess now." }]);
-      // Force a guess if max questions reached
       fetchQuestion([...chatHistory, { role: 'user', content: answer }]);
       return;
     }
-
     const newHistory = [...chatHistory, { role: 'user', content: answer }];
     setChatHistory(newHistory);
     fetchQuestion(newHistory);
   };
 
   const handleGuessResponse = async (isCorrect: boolean) => {
+    const userResponse = isCorrect ? 'Yes, you got it!' : 'No, that is not correct.';
+    const newHistory = [...chatHistory, { role: 'user', content: userResponse }];
+    setChatHistory(newHistory);
+
     if (isCorrect) {
-      setChatHistory((prev) => [...prev, { role: 'user', content: 'Yes, you got it!' }]);
       setGameState(GameState.Finished);
       // TODO: Save game to DB
       console.log('Game Won! Saving to DB...');
     } else {
-      setChatHistory((prev) => [...prev, { role: 'user', content: 'No, that is not correct.' }]);
       setGameState(GameState.Playing);
       setCurrentGuess(null);
-      fetchQuestion([...chatHistory, { role: 'user', content: 'No, that is not correct.' }]); // Continue playing
+      fetchQuestion(newHistory);
     }
   };
 
+  const renderAnswerButtons = () => (
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mt-6 animate-fade-in">
+      <button onClick={() => handleAnswer('Yes')} className="btn-answer bg-green-500 hover:bg-green-600">Yes</button>
+      <button onClick={() => handleAnswer('No')} className="btn-answer bg-red-500 hover:bg-red-600">No</button>
+      <button onClick={() => handleAnswer("I don't know")} className="btn-answer bg-yellow-500 hover:bg-yellow-600 text-gray-900">I don't know</button>
+      <button onClick={() => handleAnswer('Probably')} className="btn-answer bg-blue-500 hover:bg-blue-600">Probably</button>
+      <button onClick={() => handleAnswer('Probably Not')} className="btn-answer bg-purple-500 hover:bg-purple-600">Probably Not</button>
+    </div>
+  );
+
   if (!session) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-gray-600">
-        <p className="text-lg mb-4">Please sign in to start a new game.</p>
-        <button
-          onClick={() => handleStartGame()} // This will trigger sign-in via NextAuth if not logged in
-          className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-        >
+      <div className="w-full max-w-2xl mx-auto bg-gray-800/80 backdrop-blur-md shadow-2xl rounded-2xl p-8 text-center">
+        <h2 className="text-3xl font-bold mb-4">Welcome to Akinator-LLM</h2>
+        <p className="text-gray-300 mb-6">Please sign in to challenge the AI and see if it can guess what you're thinking!</p>
+        <button onClick={() => signIn()} className="btn-primary bg-blue-600 hover:bg-blue-700">
           Sign In to Play
         </button>
       </div>
@@ -110,116 +125,59 @@ export default function GameWindow() {
   }
 
   return (
-    <div className="flex flex-col h-full max-w-2xl mx-auto bg-white shadow-lg rounded-lg overflow-hidden">
-      <div className="flex-grow p-4 overflow-y-auto bg-gray-50">
-        {chatHistory.length === 0 && gameState === GameState.Idle && (
-          <div className="text-center text-gray-500 mt-10">
-            <p className="text-xl mb-4">Welcome to Akinator-LLM!</p>
-            <p>Think of a character, object, or concept, and I will try to guess it.</p>
-            <button
-              onClick={handleStartGame}
-              className="mt-6 bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
-            >
+    <div className="w-full h-[80vh] max-w-3xl mx-auto flex flex-col bg-gray-800/80 backdrop-blur-md shadow-2xl rounded-2xl overflow-hidden border border-gray-700/50">
+      <div className="flex-grow p-6 overflow-y-auto space-y-6">
+        {chatHistory.map((msg, index) => (
+          <div key={index} className={`flex items-end gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            {msg.role === 'assistant' && <div className="w-8 h-8 rounded-full bg-blue-500 flex-shrink-0"></div>}
+            <div className={`max-w-md p-3 rounded-2xl text-white ${msg.role === 'assistant' ? 'bg-gray-700' : 'bg-blue-600'}`}>
+              <p>{msg.content}</p>
+            </div>
+          </div>
+        ))}
+        {isLoading && (
+          <div className="flex justify-start gap-3">
+            <div className="w-8 h-8 rounded-full bg-blue-500 flex-shrink-0"></div>
+            <div className="max-w-md p-3 rounded-2xl bg-gray-700 text-white">
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse [animation-delay:-0.3s]"></div>
+                <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse [animation-delay:-0.15s]"></div>
+                <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+              </div>
+            </div>
+          </div>
+        )}
+        <div ref={chatEndRef} />
+      </div>
+
+      <div className="p-6 border-t border-gray-700/50">
+        {gameState === GameState.Idle && (
+          <div className="text-center">
+            <h2 className="text-2xl font-bold mb-2">Ready for a challenge?</h2>
+            <p className="text-gray-400 mb-6">Think of anything, and I'll try to guess it in 20 questions or less.</p>
+            <button onClick={handleStartGame} className="btn-primary bg-green-600 hover:bg-green-700">
               Start New Game
             </button>
           </div>
         )}
 
-        {chatHistory.map((msg, index) => (
-          <div
-            key={index}
-            className={`mb-3 p-3 rounded-lg ${
-              msg.role === 'assistant' ? 'bg-blue-100 self-start' : 'bg-gray-200 self-end'
-            }`}
-          >
-            <p className="font-semibold">{msg.role === 'assistant' ? 'Akinator' : 'You'}:</p>
-            <p>{msg.content}</p>
-          </div>
-        ))}
-
-        {isLoading && (
-          <div className="text-center text-gray-500 mt-4">
-            <p>Thinking...</p>
-          </div>
-        )}
-
-        {gameState === GameState.Playing && questionCount < MAX_QUESTIONS && !isLoading && (
-          <div className="flex flex-wrap justify-center gap-2 mt-4">
-            <button
-              onClick={() => handleAnswer('Yes')}
-              className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
-            >
-              Yes
-            </button>
-            <button
-              onClick={() => handleAnswer('No')}
-              className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
-            >
-              No
-            </button>
-            <button
-              onClick={() => handleAnswer("I don't know")}
-              className="bg-yellow-500 hover:bg-yellow-700 text-gray-800 font-bold py-2 px-4 rounded"
-            >
-              I don't know
-            </button>
-            <button
-              onClick={() => handleAnswer('Probably')}
-              className="bg-purple-500 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded"
-            >
-              Probably
-            </button>
-            <button
-              onClick={() => handleAnswer('Probably Not')}
-              className="bg-orange-500 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded"
-            >
-              Probably Not
-            </button>
-          </div>
-        )}
+        {gameState === GameState.Playing && !isLoading && renderAnswerButtons()}
 
         {gameState === GameState.Guessing && currentGuess && !isLoading && (
-          <div className="text-center mt-4">
-            <p className="text-xl font-semibold mb-4">My guess is... {currentGuess}! Am I right?</p>
+          <div className="text-center animate-fade-in">
+            <p className="text-xl font-semibold mb-4">My guess is... <span className="text-blue-400">{currentGuess}</span>! Am I right?</p>
             <div className="flex justify-center gap-4">
-              <button
-                onClick={() => handleGuessResponse(true)}
-                className="bg-green-600 hover:bg-green-800 text-white font-bold py-2 px-4 rounded"
-              >
-                Yes, you got it!
-              </button>
-              <button
-                onClick={() => handleGuessResponse(false)}
-                className="bg-red-600 hover:bg-red-800 text-white font-bold py-2 px-4 rounded"
-              >
-                No, keep guessing.
-              </button>
+              <button onClick={() => handleGuessResponse(true)} className="btn-answer bg-green-500 hover:bg-green-600">Yes, you got it!</button>
+              <button onClick={() => handleGuessResponse(false)} className="btn-answer bg-red-500 hover:bg-red-600">No, keep guessing</button>
             </div>
           </div>
         )}
 
         {gameState === GameState.Finished && (
-          <div className="text-center mt-4">
-            <p className="text-2xl font-bold text-green-600 mb-4">🎉 I guessed it! 🎉</p>
-            <button
-              onClick={handleStartGame}
-              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-            >
+          <div className="text-center animate-fade-in">
+            <p className="text-2xl font-bold text-green-400 mb-4">🎉 I guessed it! Another round? 🎉</p>
+            <button onClick={handleStartGame} className="btn-primary bg-blue-600 hover:bg-blue-700">
               Play Again
-            </button>
-          </div>
-        )}
-
-        {questionCount >= MAX_QUESTIONS && gameState === GameState.Playing && !isLoading && (
-          <div className="text-center mt-4">
-            <p className="text-xl font-semibold text-red-600 mb-4">
-              I've reached my question limit ({MAX_QUESTIONS} questions). I need to make a final guess!
-            </p>
-            <button
-              onClick={() => handleAnswer('Make a final guess')} // Trigger a guess
-              className="bg-purple-500 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded"
-            >
-              Force Guess
             </button>
           </div>
         )}
@@ -227,3 +185,4 @@ export default function GameWindow() {
     </div>
   );
 }
+

@@ -1,10 +1,13 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { Poppins } from 'next/font/google';
 import './globals.css';
 import Provider from '@/components/Provider';
 import Navbar from '@/components/Navbar';
 
-const inter = Inter({ subsets: ['latin'] });
+const poppins = Poppins({
+  subsets: ['latin'],
+  weight: ['400', '600', '700'],
+});
 
 export const metadata: Metadata = {
   title: 'Akinator-LLM',
@@ -18,11 +21,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body className={poppins.className}>
         <Provider>
-          <div className="flex flex-col min-h-screen">
+          <div className="flex flex-col min-h-screen bg-gray-900 text-white">
             <Navbar />
-            <main className="flex-grow flex items-center justify-center bg-gray-100 p-4">
+            <main className="flex-grow flex items-center justify-center p-4">
               {children}
             </main>
           </div>
