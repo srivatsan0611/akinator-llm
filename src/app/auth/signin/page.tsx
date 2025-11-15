@@ -2,6 +2,7 @@
 
 import { getProviders, signIn } from 'next-auth/react';
 import { useState, useEffect } from 'react';
+import { FaGoogle, FaGithub } from 'react-icons/fa';
 
 type Provider = {
   id: string;
@@ -9,6 +10,11 @@ type Provider = {
   type: string;
   signinUrl: string;
   callbackUrl: string;
+};
+
+const providerIcons: { [key: string]: JSX.Element } = {
+  Google: <FaGoogle />,
+  GitHub: <FaGithub />,
 };
 
 export default function SignInPage() {
@@ -31,9 +37,10 @@ export default function SignInPage() {
           Object.values(providers).map((provider) => (
             <div key={provider.name}>
               <button
-                onClick={() => signIn(provider.id)}
-                className="w-full text-white font-bold py-3 px-6 rounded-lg transition-transform transform hover:scale-105 shadow-lg bg-gray-700 hover:bg-gray-600"
+                onClick={() => signIn(provider.id, { callbackUrl: '/' })}
+                className="w-full flex items-center justify-center gap-3 text-white font-bold py-3 px-6 rounded-lg transition-all transform hover:scale-105 shadow-lg bg-gray-700 hover:bg-gray-600 border border-transparent hover:border-blue-500"
               >
+                {providerIcons[provider.name]}
                 Sign in with {provider.name}
               </button>
             </div>
