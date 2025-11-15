@@ -85,18 +85,19 @@ export async function POST(req: NextRequest) {
 
     const chatCompletion = await groq.chat.completions.create({
       messages: messages as any, // Type assertion due to Groq SDK's strict typing
-      model: 'llama3-70b-8192',
+      model: 'qwen/qwen3-32b',
       temperature: 0.7,
       max_tokens: 150,
     });
 
     const llmResponse = chatCompletion.choices[0]?.message?.content || '';
+    const cleanResponse = llmResponse.replace(/<think>[\s\S]*?<\/think>/, '').trim();
 
-    if (llmResponse.startsWith('GUESS:')) {
-      const guessContent = llmResponse.replace('GUESS:', '').trim();
+    if (cleanResponse.startsWith('GUESS:')) {
+      const guessContent = cleanResponse.replace('GUESS:', '').trim();
       return NextResponse.json({ type: 'guess', content: guessContent });
     } else {
-      return NextResponse.json({ type: 'question', content: llmResponse.trim() });
+      return NextResponse.json({ type: 'question', content: cleanResponse.trim() });
     }
   } catch (error) {
     console.error('Groq API error:', error);
