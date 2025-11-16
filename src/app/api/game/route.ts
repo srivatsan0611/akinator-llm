@@ -28,23 +28,115 @@ export async function POST(req: NextRequest) {
   }
 
   // System prompt for Akinator game
-  const systemPrompt = `You are Akinator-LLM, a guessing game AI. Your goal is to guess what the user is thinking of by asking yes/no questions.
+  const systemPrompt = `
+  You are Akinator-LLM — an entity identification engine. Your ONLY actions are asking a deductive question or making a final guess. Output VALID JSON ONLY. Never output anything besides the JSON object.
 
-RULES:
-1. You have a maximum of 20 questions
-2. Ask ONE specific yes/no question per turn
-3. When you're confident, make a guess by prefixing it with "GUESS: "
-4. Be direct - no small talk, no apologies, no extra commentary
-5. Questions should be answerable with: Yes, No, Probably, Probably Not, or I don't know
+  PERMITTED OUTPUT FORMATS:
 
-EXAMPLES:
-- Question: "Is it a real person?"
-- Question: "Does it live in water?"
-- Guess: "GUESS: Is it SpongeBob SquarePants?"
+  Ask a question:
+  {"question": "Your yes/no question here"}
 
-If this is the first question (no history), ask a broad opening question like "Is it a real person?" or "Is it a fictional character?"
+  Make a final guess:
+  {"guess": "Exact Name"}
 
-Respond with ONLY your question or guess, nothing else.`;
+  No explanations, no commentary, no reasoning outside the JSON.
+
+  ------------------------------------------
+  CORE OPERATING RULES
+  ------------------------------------------
+
+  1. Follow the Deduction Hierarchy.
+  You may ONLY move downward after confirming the parent category:
+
+  1. Living vs Non-living
+  2. If living → Human / Animal / Plant / Other
+  3. If human → Real or Fictional
+  4. If real → Alive or Dead
+  5. For humans → Profession / Field (actor, athlete, politician, etc.)
+  6. For confirmed categories → Nationality / Region
+  7. Then → Era, achievements, traits
+  8. When sufficiently narrowed → Make a guess
+
+  You may NOT explore subcategories until their parent category is confirmed.
+
+  ------------------------------------------
+
+  2. "NO" Eliminates an Entire Branch.
+  A "No" permanently kills that branch. Switch to a different branch at the same hierarchy level. Never return to a branch eliminated by a No.
+
+  ------------------------------------------
+
+  3. NEVER Ask Questions That:
+  - Contradict previous answers
+  - Repeat earlier questions
+  - Assume categories not yet confirmed
+  - Reset to earlier hierarchy levels
+  - Are irrelevant to the confirmed category (e.g., asking about locations for a human)
+
+  Examples of illegal behavior:
+  - Asking "Is it an object?" after confirming it’s a human
+  - Asking "Is it indoors?" after confirming it's a person
+  - Asking "Is it American?" before profession is confirmed
+  - Asking "Is it a mammal?" after learning it's non-living
+
+  ------------------------------------------
+
+  4. Every question must be binary, clear, and eliminative.
+  Questions must remove large chunks of the possibility space and match the current hierarchy level.
+
+  ------------------------------------------
+
+  5. Maximum 20 questions. Use them efficiently.
+
+  ------------------------------------------
+
+  6. When fewer than 10 plausible candidates remain, begin making specific guesses.
+  Don’t stall with overly specific trivia-level questions.
+
+  ------------------------------------------
+  STATE RULES (Llama-Safe)
+  ------------------------------------------
+
+  Before outputting a question, internally verify:
+  - It does not contradict any previous info
+  - It has not been asked already
+  - It fits the correct hierarchy level
+  - It makes no unconfirmed assumptions
+
+  If not valid, choose a different question.
+
+  ------------------------------------------
+  STARTING BEHAVIOR
+  ------------------------------------------
+
+  Your first question can be ANY top-level category question. Examples:
+  - "Is it a living thing?"
+  - "Is it a person?"
+  - "Is it an animal?"
+  - "Is it a real thing?"
+
+  Choose whichever top-level opener you want.
+
+  ------------------------------------------
+  RESPONSE RULES
+  ------------------------------------------
+
+  If the user answers:
+  - "Yes" → Go deeper within the confirmed category
+  - "No" → Switch to a different branch at the same level
+  - "I don’t know" → Ask something that reduces uncertainty
+
+  ------------------------------------------
+  ENDGAME
+  ------------------------------------------
+
+  When confident, output a specific guess:
+
+  {"guess": "Exact Name"}
+
+  Never guess categories or broad groups. Only specific entities.
+  `;
+
 
   try {
     const messages = [
@@ -55,46 +147,142 @@ Respond with ONLY your question or guess, nothing else.`;
       })),
     ];
 
+    console.log('Chat history length:', chatHistory.length);
+    console.log('Last 3 exchanges:', chatHistory.slice(-6));
+
     const chatCompletion = await groq.chat.completions.create({
       messages,
-      model: 'qwen/qwen3-32b',
-      temperature: 0.3,
-      max_tokens: 150,
+      model: 'llama-3.1-8b-instant',
+      temperature: 0.7,
+      max_tokens: 100,
+      response_format: { type: 'json_object' },
     });
 
-    let llmResponse = chatCompletion.choices[0]?.message?.content || '';
+    const rawResponse = chatCompletion.choices[0]?.message?.content || '{}';
+    console.log('Raw LLM Response:', rawResponse);
 
-    // Clean up the response - remove thinking tags, markdown code blocks, etc.
-    // First, remove complete <think>...</think> blocks
-    llmResponse = llmResponse.replace(/<think>[\s\S]*?<\/think>/gi, '');
+    let parsed;
+    try {
+      parsed = JSON.parse(rawResponse);
+    } catch (err) {
+      console.error('JSON Parse Error:', err);
+      console.error('Raw response:', rawResponse);
 
-    // Also remove any unclosed <think> tags and everything after them
-    llmResponse = llmResponse.replace(/<think>[\s\S]*/gi, '');
+      // Fallback question
+      return NextResponse.json({
+        type: 'question',
+        content: 'Is this person still alive today?',
+      });
+    }
 
-    // Remove any stray closing tags
-    llmResponse = llmResponse.replace(/<\/think>/gi, '');
+    console.log('Parsed JSON:', parsed);
 
-    // Remove markdown code blocks
-    llmResponse = llmResponse
-      .replace(/```json\s*/g, '')
-      .replace(/```\s*/g, '')
-      .replace(/\\n/g, ' ') // Replace escaped newlines with spaces
-      .replace(/\\/g, '') // Remove backslashes
-      .trim();
+    // Handle guess
+    if (parsed.guess) {
+      const guessContent = parsed.guess.trim();
 
-    // Check if it's a guess
-    if (llmResponse.toUpperCase().startsWith('GUESS:')) {
-      const guessContent = llmResponse.replace(/^GUESS:\s*/i, '').trim();
+      // Validate that the guess is specific, not vague
+      const vaguePhrases = [
+        'a fictional character',
+        'a famous',
+        'an actor',
+        'a musician',
+        'a type of',
+        'something',
+        'someone',
+        'a person',
+        'a place',
+        'a thing',
+      ];
+
+      const isVague = vaguePhrases.some(phrase =>
+        guessContent.toLowerCase().includes(phrase)
+      );
+
+      if (isVague) {
+        console.warn('Vague guess detected:', guessContent);
+        return NextResponse.json({
+          type: 'question',
+          content: 'What specific region or country is this person from?',
+        });
+      }
+
       return NextResponse.json({
         type: 'guess',
         content: guessContent,
       });
     }
 
-    // Otherwise it's a question
+    // Handle question
+    if (parsed.question) {
+      const questionContent = parsed.question.trim();
+
+      // Check for duplicates
+      const previousQuestions = chatHistory
+        .filter(msg => msg.role === 'assistant')
+        .map(msg => msg.content.toLowerCase().trim());
+
+      const isDuplicate = previousQuestions.some(prevQ =>
+        prevQ === questionContent.toLowerCase().trim()
+      );
+
+      if (isDuplicate) {
+        console.warn('Duplicate question detected:', questionContent);
+
+        // Smart fallbacks based on what we know
+        const fallbackFollowUps = [
+          'Is it a real person?',
+          'Is it a fictional character?',
+          'Is it a physical object you can touch?',
+          'Is it a place or location?',
+          'Is it an abstract concept or idea?',
+        ];
+
+        const randomIndex = Math.floor(Math.random() * fallbackFollowUps.length);
+
+        return NextResponse.json({
+          type: 'question',
+          content: fallbackFollowUps[randomIndex],
+        });
+      }
+
+      // Check if stuck in same category (getting multiple NOs in a row on similar topics)
+      const recentHistory = chatHistory.slice(-6); // Last 3 exchanges
+      const recentNos = recentHistory.filter(msg =>
+        msg.role === 'user' && msg.content.toLowerCase() === 'no'
+      ).length;
+
+      if (recentNos >= 3) {
+        console.warn('Multiple NOs detected - forcing category switch');
+
+        // Force a category-switching question
+        const categorySwitchQuestions = [
+          'Is it something that exists in the real world (not fictional)?',
+          'Is it a human being?',
+          'Is it something you would find indoors?',
+          'Is it related to technology or electronics?',
+          'Is it something associated with entertainment or media?',
+        ];
+
+        const randomIndex = Math.floor(Math.random() * categorySwitchQuestions.length);
+
+        return NextResponse.json({
+          type: 'question',
+          content: categorySwitchQuestions[randomIndex],
+        });
+      }
+
+      return NextResponse.json({
+        type: 'question',
+        content: questionContent,
+      });
+    }
+
+    // Invalid response - fallback
+    console.error('Invalid JSON structure:', parsed);
     return NextResponse.json({
       type: 'question',
-      content: llmResponse,
+      content: 'Is this person from Europe?',
     });
 
   } catch (error) {
