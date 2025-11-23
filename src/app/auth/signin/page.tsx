@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import { getProviders, signIn } from 'next-auth/react';
 import { useState, useEffect } from 'react';
 import { FaGoogle, FaGithub } from 'react-icons/fa';
@@ -12,7 +13,7 @@ type Provider = {
   callbackUrl: string;
 };
 
-const providerIcons: { [key: string]: JSX.Element } = {
+const providerIcons: { [key: string]: React.JSX.Element } = {
   Google: <FaGoogle className="text-xl" />,
   GitHub: <FaGithub className="text-xl" />,
 };
