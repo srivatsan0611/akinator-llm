@@ -77,18 +77,18 @@ export default function GameWindow() {
 
   const handleAnswer = (answer: string) => {
     if (questionCount >= MAX_QUESTIONS && gameState === GameState.Playing) {
-      setChatHistory((prev) => [...prev, { role: 'assistant', content: "I've reached my question limit. I'll make a guess now." }]);
-      fetchQuestion([...chatHistory, { role: 'user', content: answer }]);
+      setChatHistory((prev) => [...prev, { role: 'assistant' as const, content: "I've reached my question limit. I'll make a guess now." }]);
+      fetchQuestion([...chatHistory, { role: 'user' as const, content: answer }]);
       return;
     }
-    const newHistory = [...chatHistory, { role: 'user', content: answer }];
+    const newHistory: ChatMessage[] = [...chatHistory, { role: 'user', content: answer }];
     setChatHistory(newHistory);
     fetchQuestion(newHistory);
   };
 
   const handleGuessResponse = async (isCorrect: boolean) => {
     const userResponse = isCorrect ? 'Yes, you got it!' : 'No, that is not correct.';
-    const newHistory = [...chatHistory, { role: 'user', content: userResponse }];
+    const newHistory: ChatMessage[] = [...chatHistory, { role: 'user', content: userResponse }];
     setChatHistory(newHistory);
 
     if (isCorrect) {
